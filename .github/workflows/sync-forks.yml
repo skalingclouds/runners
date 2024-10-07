@@ -29,8 +29,8 @@ jobs:
 
           # Loop through all pages
           while :; do
-            # Fetch repositories by page
-            RESPONSE=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            # Fetch repositories by page using Personal Access Token
+            RESPONSE=$(curl -s -H "Authorization: token ${{ secrets.PERSONAL_ACCESS_TOKEN }}" \
               "https://api.github.com/user/repos?per_page=$PER_PAGE&page=$PAGE")
 
             # Output the raw response for debugging purposes
@@ -63,7 +63,7 @@ jobs:
             echo "Syncing fork for repository: $REPO"
             git clone "https://github.com/${{ github.repository_owner }}/$REPO.git"
             cd "$REPO"
-            UPSTREAM_URL=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            UPSTREAM_URL=$(curl -s -H "Authorization: token ${{ secrets.PERSONAL_ACCESS_TOKEN }}" \
               "https://api.github.com/repos/${{ github.repository_owner }}/$REPO" | jq -r '.parent.clone_url')
 
             # Check if UPSTREAM_URL is valid
