@@ -2,8 +2,8 @@ name: Sync Forks
 
 on:
   schedule:
-    # * is a special character in YAML so you have to quote this string
-    - cron:  '30 5,17 * * *'
+    # Run the action daily at midnight
+    - cron: "0 0 * * *"
   workflow_dispatch: # Allow manual triggering of the workflow
 
 jobs:
@@ -33,7 +33,10 @@ jobs:
             RESPONSE=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
               "https://api.github.com/user/repos?per_page=$PER_PAGE&page=$PAGE")
 
-            # Break the loop if there are no more repositories
+            # Output the raw response for debugging purposes
+            echo "API Response for page $PAGE: $RESPONSE"
+
+            # Check if we have received a response or if it is empty
             if [ "$(echo "$RESPONSE" | jq '. | length')" -eq 0 ]; then
               break
             fi
@@ -49,8 +52,11 @@ jobs:
           # Output the final list of repositories
           echo "Repositories to sync: $REPOS"
 
-          # Export REPOS to GitHub environment variable
-          echo "REPOS=$REPOS" >> $GITHUB_ENV
+          # Check if REPOS is empty
+          if [ -z "$REPOS" ]; then
+            echo "No forked repositories found to sync."
+            exit 0
+          fi
 
           # Loop through each repository and perform the sync
           for REPO in $REPOS; do
@@ -59,7 +65,15 @@ jobs:
             cd "$REPO"
             UPSTREAM_URL=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
               "https://api.github.com/repos/${{ github.repository_owner }}/$REPO" | jq -r '.parent.clone_url')
-            git remote add upstream "$UPSTREAM_URL"
+
+            # Check if UPSTREAM_URL is valid
+            if [ "$UPSTREAM_URL" == "null" ]; then
+              echo "No upstream found for $REPO, skipping..."
+              cd ..
+              continue
+            fi
+
+            git remote add upstream "$UPSTREAM_URL" || echo "Upstream already exists for $REPO"
             git fetch upstream
             git merge upstream/main --no-edit
             git push origin main
