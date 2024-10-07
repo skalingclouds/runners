@@ -1,36 +1,16 @@
-name: Sync Forks
+echo "Fetching all repositories..."
 
-on:
-  schedule:
-    # Run the action periodically (once a day at midnight)
-    - cron: "0 0 * * *"
-  workflow_dispatch: # Also allow manual triggering
+# Fetch the repositories from the GitHub API
+RESPONSE=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" https://api.github.com/user/repos?per_page=100)
 
-jobs:
-  sync:
-    runs-on: ubuntu-latest
-    steps:
-    - name: Checkout repo
-      uses: actions/checkout@v3
+# Output the response for debugging (optional)
+echo "API Response: $RESPONSE"
 
-    - name: Install curl and jq
-      run: sudo apt-get install -y curl jq
+# Ensure 'fork' is properly handled and repositories are selected correctly
+REPOS=$(echo "$RESPONSE" | jq -r '.[] | select(.fork == true) | .name')
 
-    - name: Get all repositories
-      run: |
-        echo "Fetching all repositories..."
-        REPOS=$(curl -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" https://api.github.com/user/repos?per_page=100 | jq '.[] | select(.fork==true) | .name')
-        echo "REPOS=$REPOS" >> $GITHUB_ENV
+# Debug the REPOS value
+echo "Repositories to sync: $REPOS"
 
-    - name: Sync Forks
-      run: |
-        for REPO in $REPOS; do
-          echo "Syncing fork for repository: $REPO"
-          git clone "https://github.com/${{ github.repository_owner }}/$REPO.git"
-          cd "$REPO"
-          git remote add upstream "$(curl -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" https://api.github.com/repos/${{ github.repository_owner }}/$REPO | jq -r '.parent.clone_url')"
-          git fetch upstream
-          git merge upstream/main --no-edit
-          git push origin main
-          cd ..
-        done
+# Export the REPOS variable to GitHub Actions environment
+echo "REPOS=$REPOS" >> $GITHUB_ENV
