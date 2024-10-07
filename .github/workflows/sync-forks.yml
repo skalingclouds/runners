@@ -1,4 +1,4 @@
-name: Sync Forks
+name: Update Forks
 
 on:
   schedule:
@@ -7,7 +7,7 @@ on:
   workflow_dispatch: # Allow manual triggering of the workflow
 
 jobs:
-  sync:
+  update:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repo
@@ -16,7 +16,7 @@ jobs:
       - name: Install jq
         run: sudo apt-get install -y jq
 
-      - name: Fetch all repositories and sync forks
+      - name: Fetch all repositories and update forks
         run: |
           echo "Fetching all repositories..."
 
@@ -50,18 +50,18 @@ jobs:
           done
 
           # Output the final list of repositories
-          echo "Repositories to sync: $REPOS"
+          echo "Repositories to update: $REPOS"
 
           # Check if REPOS is empty
           if [ -z "$REPOS" ]; then
-            echo "No forked repositories found to sync."
+            echo "No forked repositories found to update."
             exit 0
           fi
 
-          # Loop through each repository and perform the sync
+          # Loop through each repository and perform the update
           for REPO in $REPOS; do
             # Use -- to prevent issues with repo names starting with '-'
-            echo "Syncing fork for repository: $REPO"
+            echo "Updating fork for repository: $REPO"
             git clone -- "https://github.com/${{ github.repository_owner }}/$REPO.git" || continue
             cd "$REPO" || continue
             UPSTREAM_URL=$(curl -s -H "Authorization: token ${{ secrets.PERSONAL_ACCESS_TOKEN }}" \
@@ -77,6 +77,5 @@ jobs:
             git remote add upstream "$UPSTREAM_URL" || echo "Upstream already exists for $REPO"
             git fetch upstream
             git merge upstream/main --no-edit
-            git push origin main
             cd ..
           done
