@@ -1,16 +1,67 @@
-echo "Fetching all repositories..."
+name: Sync Forks
 
-# Fetch the repositories from the GitHub API
-RESPONSE=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" https://api.github.com/user/repos?per_page=100)
+on:
+  schedule:
+    # Run the action daily at midnight
+    - cron: "0 0 * * *"
+  workflow_dispatch: # Allow manual triggering of the workflow
 
-# Output the response for debugging (optional)
-echo "API Response: $RESPONSE"
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v3
 
-# Ensure 'fork' is properly handled and repositories are selected correctly
-REPOS=$(echo "$RESPONSE" | jq -r '.[] | select(.fork == true) | .name')
+      - name: Install jq
+        run: sudo apt-get install -y jq
 
-# Debug the REPOS value
-echo "Repositories to sync: $REPOS"
+      - name: Fetch all repositories and sync forks
+        run: |
+          echo "Fetching all repositories..."
 
-# Export the REPOS variable to GitHub Actions environment
-echo "REPOS=$REPOS" >> $GITHUB_ENV
+          # Initialize an empty variable for REPOS
+          REPOS=""
+
+          # Pagination: Start from page 1
+          PAGE=1
+          PER_PAGE=100
+
+          # Loop through all pages
+          while :; do
+            # Fetch repositories by page
+            RESPONSE=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+              "https://api.github.com/user/repos?per_page=$PER_PAGE&page=$PAGE")
+
+            # Break the loop if there are no more repositories
+            if [ "$(echo "$RESPONSE" | jq '. | length')" -eq 0 ]; then
+              break
+            fi
+
+            # Add repositories from the current page to the REPOS variable
+            PAGE_REPOS=$(echo "$RESPONSE" | jq -r '.[] | select(.fork == true) | .name')
+            REPOS="$REPOS $PAGE_REPOS"
+
+            # Increment the page number
+            PAGE=$((PAGE + 1))
+          done
+
+          # Output the final list of repositories
+          echo "Repositories to sync: $REPOS"
+
+          # Export REPOS to GitHub environment variable
+          echo "REPOS=$REPOS" >> $GITHUB_ENV
+
+          # Loop through each repository and perform the sync
+          for REPO in $REPOS; do
+            echo "Syncing fork for repository: $REPO"
+            git clone "https://github.com/${{ github.repository_owner }}/$REPO.git"
+            cd "$REPO"
+            UPSTREAM_URL=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+              "https://api.github.com/repos/${{ github.repository_owner }}/$REPO" | jq -r '.parent.clone_url')
+            git remote add upstream "$UPSTREAM_URL"
+            git fetch upstream
+            git merge upstream/main --no-edit
+            git push origin main
+            cd ..
+          done
