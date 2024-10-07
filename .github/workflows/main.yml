@@ -1,0 +1,36 @@
+name: Sync Forks
+
+on:
+  schedule:
+    # Run the action periodically (once a day at midnight)
+    - cron: "0 0 * * *"
+  workflow_dispatch: # Also allow manual triggering
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout repo
+      uses: actions/checkout@v3
+
+    - name: Install curl and jq
+      run: sudo apt-get install -y curl jq
+
+    - name: Get all repositories
+      run: |
+        echo "Fetching all repositories..."
+        REPOS=$(curl -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" https://api.github.com/user/repos?per_page=100 | jq '.[] | select(.fork==true) | .name')
+        echo "REPOS=$REPOS" >> $GITHUB_ENV
+
+    - name: Sync Forks
+      run: |
+        for REPO in $REPOS; do
+          echo "Syncing fork for repository: $REPO"
+          git clone "https://github.com/${{ github.repository_owner }}/$REPO.git"
+          cd "$REPO"
+          git remote add upstream "$(curl -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" https://api.github.com/repos/${{ github.repository_owner }}/$REPO | jq -r '.parent.clone_url')"
+          git fetch upstream
+          git merge upstream/main --no-edit
+          git push origin main
+          cd ..
+        done
