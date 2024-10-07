@@ -60,9 +60,10 @@ jobs:
 
           # Loop through each repository and perform the sync
           for REPO in $REPOS; do
+            # Use -- to prevent issues with repo names starting with '-'
             echo "Syncing fork for repository: $REPO"
-            git clone "https://github.com/${{ github.repository_owner }}/$REPO.git"
-            cd "$REPO"
+            git clone -- "https://github.com/${{ github.repository_owner }}/$REPO.git" || continue
+            cd "$REPO" || continue
             UPSTREAM_URL=$(curl -s -H "Authorization: token ${{ secrets.PERSONAL_ACCESS_TOKEN }}" \
               "https://api.github.com/repos/${{ github.repository_owner }}/$REPO" | jq -r '.parent.clone_url')
 
